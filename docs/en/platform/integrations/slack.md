@@ -14,13 +14,17 @@ You do not need a Slack API key, webhook, or technical setup. Before you start, 
 
 ## Connect Slack
 
-1. Open [**Settings > Integrations**](https://platform.ultralytics.com/settings?tab=integrations) and find the **Slack** card.
-2. Click **Add to Slack**.
-3. Read the short setup summary and click **Continue to Slack**.
-4. Choose a channel and click **Allow**. Platform requests permission to post only to that channel. If Slack shows **Request approval**, send the request and ask your Slack workspace admin to approve the app.
-5. You are done. All six alerts are enabled; to change them, clear the alerts you do not want and click **Save alerts**.
+1. Open [**Settings > Integrations**](https://platform.ultralytics.com/settings?tab=integrations) and select **Slack**
+   from the integration list.
+2. Review the setup summary and click **Continue to Slack**.
+3. Choose a channel and click **Allow**. Platform requests permission to post only to that channel. If Slack shows
+   **Request approval**, send the request and ask your Slack workspace admin to approve the app.
+4. After returning to Platform, choose the alerts you want and click **Save alerts**. **Training complete** and
+   **Training failed** are selected initially.
 
-Platform posts a confirmation in the selected channel as soon as the connection succeeds. Workspace admins manage the connection and alert choices for the whole workspace from the [Integrations tab](../account/settings.md#integrations-tab).
+![Ultralytics Platform Slack Integration Setup](https://cdn.ul.run/i/9a47efa8a0df9db1d13e941e7572ca49.avif)<!-- screenshot -->
+
+Platform posts a confirmation in the selected channel as soon as the connection succeeds, and the integration then shows which Slack workspace and channel it is connected to. Workspace admins manage the connection and alert choices for the whole workspace from the [Integrations tab](../account/settings.md#integrations-tab).
 
 !!! info "What Slack Allows"
 
@@ -37,7 +41,7 @@ Platform posts a confirmation in the selected channel as soon as the connection 
 | **Deployment ready**  | A [deployment](../deploy/endpoints.md#deployment-lifecycle) is ready           |
 | **Deployment failed** | A deployment fails to start                                                    |
 
-Each message says what finished and includes a direct link to the related model or deployment in Platform. Failed-job alerts include a short error summary when one is available. Slack delivery does not change the result of the training, export, or deployment. Review the current result from the model's [training](../train/cloud-training.md#monitor-training) or [export](../train/models.md#export-model) page, or from the [Deployments page](../deploy/index.md#deployments-page).
+Each message says what finished and links straight to the related model or deployment in Platform. Training alerts add the dataset name, the model's primary metric, how long the run took, and what it cost; export alerts add the format and file size. Failed-job alerts include a short error summary when one is available, as an inline note or a code block for longer messages. Slack delivery does not change the result of the training, export, or deployment. Review the current result from the model's [training](../train/cloud-training.md#monitor-training) or [export](../train/models.md#export-model) page, or from the [Deployments page](../deploy/index.md#deployments-page).
 
 ## Change or Disconnect Slack
 
@@ -47,7 +51,8 @@ To use a different channel, click **Disconnect**, then connect Slack again and c
 
 ## Troubleshooting
 
-- **The Slack card says an admin must connect it:** ask a Platform workspace admin or owner to complete the connection.
+- **The Slack integration says an admin must connect it:** ask a Platform workspace admin or owner to complete the
+  connection.
 - **Slack shows Request approval instead of Allow:** send the request and ask your Slack workspace admin to approve the app. You do not need to create an API key or webhook.
 - **Your Slack workspace or channel is missing:** confirm that you are signed in to the correct Slack workspace and that you can add apps to the channel.
 - **The connection worked, but alerts stopped:** reconnect Slack to refresh the channel permission. This is usually needed if the app permission was revoked or the channel was removed.
