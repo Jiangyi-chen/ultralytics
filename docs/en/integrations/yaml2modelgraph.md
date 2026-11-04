@@ -1,7 +1,7 @@
 ---
 title: YAML2ModelGraph Architecture Visualization for YOLO Models
 comments: true
-description: Generate SVG architecture diagrams from Ultralytics YOLO model YAML files with YAML2ModelGraph.
+description: Generate SVG architecture diagrams of Ultralytics YOLO backbones, necks, and heads from model YAML files with the community YAML2ModelGraph tool.
 keywords: YAML2ModelGraph, YOLO, model visualization, architecture diagram, Ultralytics, SVG
 ---
 
@@ -9,7 +9,7 @@ keywords: YAML2ModelGraph, YOLO, model visualization, architecture diagram, Ultr
 
 [YAML2ModelGraph](https://github.com/WangQvQ/YAML2ModelGraph) is a community tool that converts
 [Ultralytics YOLO](../models/index.md) model YAML files into SVG architecture diagrams. It can help document custom
-models or inspect their backbone, neck, and head structure.
+models or inspect their [backbone](https://www.ultralytics.com/glossary/backbone), neck, and head structure.
 
 <p align="center">
   <img width="48%" src="https://raw.githubusercontent.com/WangQvQ/YAML2ModelGraph/main/svg/graph_paper.svg" alt="Single-head YOLO architecture rendered by YAML2ModelGraph">
@@ -61,6 +61,20 @@ tool's `themes.py`.
 
 ## Limitations
 
-YAML2ModelGraph specially aligns standard `Detect` heads. Other task heads such as `OBB`, `Pose`, and `Segment` are
+YAML2ModelGraph specially aligns standard `Detect` heads. Other task heads such as `Segment`, `Pose`, and `OBB` are
 currently rendered as generic neck-lane nodes. See the
 [YAML2ModelGraph repository](https://github.com/WangQvQ/YAML2ModelGraph) for current support and usage details.
+
+## FAQ
+
+### Does YAML2ModelGraph work with custom model YAMLs?
+
+Yes. Any Ultralytics model YAML that follows the `[from, repeats, module, args]` layer format renders, and custom module names are drawn as generic nodes. See the [model YAML configuration guide](../guides/model-yaml-config.md) for the format.
+
+### Do I need Graphviz installed?
+
+No. The tool writes SVG directly and depends only on PyYAML.
+
+### Which heads are drawn with their scale-specific structure?
+
+Only standard `Detect` heads. `Segment`, `Pose`, and `OBB` heads are drawn as generic neck-lane nodes; check the [YAML2ModelGraph repository](https://github.com/WangQvQ/YAML2ModelGraph) for current support.

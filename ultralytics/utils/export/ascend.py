@@ -17,7 +17,7 @@ def _check_atc() -> None:
         raise FileNotFoundError(
             "Ascend export requires the CANN toolkit 'atc' compiler, which was not found on PATH. Install CANN and "
             "source its environment, e.g. `source /usr/local/Ascend/ascend-toolkit/set_env.sh`. "
-            "See https://docs.ultralytics.com/integrations/ascend/"
+            "See https://docs.ultralytics.com/integrations/ascend"
         )
 
 
@@ -48,7 +48,8 @@ def onnx2ascend(
     """
     _check_atc()
     output_dir = Path(output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(output_dir, ignore_errors=True)  # a re-export would keep another chip's model
+    output_dir.mkdir(parents=True)
 
     cmd = [
         "atc",
