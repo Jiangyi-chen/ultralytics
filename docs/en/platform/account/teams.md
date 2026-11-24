@@ -10,7 +10,7 @@ keywords: Ultralytics Platform, teams, collaboration, enterprise, roles, permiss
 
 [Ultralytics Platform](https://platform.ultralytics.com) team features enable collaborative computer vision workflows. Create a team workspace to share datasets, projects, models, and deployments with your colleagues using role-based access control.
 
-![Ultralytics Platform Teams Member List With Roles](https://cdn.ul.run/i/5f238fe52109870671d17728d8f3ca94.avif)<!-- screenshot -->
+![Ultralytics Platform Teams Member List With Roles](https://cdn.ul.run/i/ea2bf2f23ea18d16f7ca3bd79556572a.avif)<!-- screenshot -->
 
 ## Overview
 
@@ -137,7 +137,7 @@ Admins and Owners can invite new members to the team:
 5. Click **Continue**, review the seat cost, then click **Confirm & invite** (workspaces without seat billing, such as
    Enterprise, show **Send Invitation** instead)
 
-![Ultralytics Platform Teams Invite Member Dialog](https://cdn.ul.run/i/95a332021091e791023d0f789d806a0b.avif)<!-- screenshot -->
+![Ultralytics Platform Teams Invite Member Dialog](https://cdn.ul.run/i/4756bf3fa0f28c66d3726bcf040f7f6b.avif)<!-- screenshot -->
 
 What happens next depends on whether the invitee already uses the Platform:
 

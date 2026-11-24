@@ -52,6 +52,7 @@ SOLUTION_MAP = {
     "region": "RegionCounter",
     "security": "SecurityAlarm",
     "parking": "ParkingManagement",
+    "ocr": "OCR",
     "help": None,
 }
 
@@ -247,6 +248,7 @@ CFG_FRACTION_KEYS = frozenset(
         "fraction",
         "multi_scale",
         "dlam",
+        "tile_overlap",
     }
 )
 CFG_INT_KEYS = frozenset(
@@ -509,6 +511,10 @@ def check_cfg(cfg: dict, hard: bool = True) -> None:
                 if hard:
                     raise TypeError(f"'{k}={v}' is of invalid type {type(v).__name__}. '{k}' must be a str.")
                 cfg[k] = str(v)
+            elif k == "tile" and not isinstance(v, bool):
+                s = [v, v] if isinstance(v, int) else v
+                if not (isinstance(s, (list, tuple)) and len(s) == 2 and all(isinstance(x, int) and x > 0 for x in s)):
+                    raise ValueError(f"'{k}={v}' is invalid. Valid '{k}' values are False, True, an int or [h, w] > 0.")
             elif k == "compile" and not isinstance(v, (bool, str)):  # False=off, True="default", or a mode string
                 if hard:
                     raise TypeError(
@@ -619,6 +625,12 @@ def _handle_deprecation(custom: dict) -> dict:
         half_on = half is not None and str(half).strip().lower() not in {"none", "false", "0"}
         custom["quantize"] = 8 if int8_on else 16 if half_on else None  # False/0 clears precision back to FP32
         deprecation_warn("int8" if int8 is not None else "half", "quantize")
+
+    device = str(custom.get("device"))
+    if device.lower().startswith("intel:"):  # OpenVINO and LiteRT take PyTorch device names, 'xpu' is the Intel GPU
+        name = device[6:].lower()
+        custom["device"] = None if name == "auto" else name.replace("gpu", "xpu").replace(".", ":")
+        deprecation_warn(f"device={device}", f"device={custom['device']}")
 
     for old_key, (new_key, transform) in deprecated_mappings.items():
         if old_key not in custom:
@@ -1181,10 +1193,9 @@ def entrypoint(debug: str = "") -> None:
         if overrides.get("data") is None and not overrides.get("resume"):
             overrides["data"] = DEFAULT_CFG.data or TASK2DATA.get(task or DEFAULT_CFG.task, DEFAULT_CFG.data)
             LOGGER.warning(f"'data' argument is missing. Using default 'data={overrides['data']}'.")
-    elif mode == "export":
-        if "format" not in overrides:
-            overrides["format"] = DEFAULT_CFG.format or "torchscript"
-            LOGGER.warning(f"'format' argument is missing. Using default 'format={overrides['format']}'.")
+    elif mode == "export" and "format" not in overrides:
+        overrides["format"] = DEFAULT_CFG.format or "torchscript"
+        LOGGER.warning(f"'format' argument is missing. Using default 'format={overrides['format']}'.")
 
     # Run command in python
     getattr(model, mode)(**overrides)  # default args from model

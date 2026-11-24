@@ -20,6 +20,7 @@ keywords: Ultralytics, YOLO, YOLO26, YOLO11, object detection, image segmentatio
 <a href="https://docs.ultralytics.com/fr">Français</a> ·
 <a href="https://docs.ultralytics.com/es">Español</a> ·
 <a href="https://docs.ultralytics.com/pt">Português</a> ·
+<a href="https://docs.ultralytics.com/it">Italiano</a> ·
 <a href="https://docs.ultralytics.com/tr">Türkçe</a> ·
 <a href="https://docs.ultralytics.com/vi">Tiếng Việt</a> ·
 <a href="https://docs.ultralytics.com/ar">العربية</a>
@@ -52,11 +53,23 @@ Request an Enterprise License for commercial use at [Ultralytics Licensing](http
 
     Explore the [YOLO27 preview](models/yolo27.md), including architecture details, preliminary benchmarks, and examples for use after release. Models are undergoing final R&D for an anticipated launch later this year; they are not yet available, and no launch date is set.
 
+!!! tip "🚀 New: Scene Text OCR"
+
+    Detect and recognize scene text with YOLO26-Text using PaddleOCR or your own recognition model.
+
+    [:octicons-arrow-right-24: Learn more](guides/ocr.md)
+
 !!! tip "🚀 New: Monocular Depth Estimation"
 
     Turn a single photo into a depth map, a distance in meters for every pixel.
 
     [:octicons-arrow-right-24: Learn more](tasks/depth.md)
+
+!!! tip "🚀 New: High Resolution Tiling"
+
+    Train, validate, and predict on large images with fixed tiles across every vision task.
+
+    [:octicons-arrow-right-24: Learn more](guides/high-resolution-tiling.md)
 
 ## Get Started in Two Commands
 
@@ -167,7 +180,7 @@ Most model workflow `yolo` commands follow one grammar, `yolo [TASK] MODE ARGS`,
 - **[Args](usage/cfg.md)** configures the command, from which [model](models/index.md) to run with `model=` to hyperparameters like `epochs` and `imgsz`.
 - **[Solutions](solutions/index.md)** is the shortcut: a finished application, like object counting or a security alarm, that skips Task and Mode entirely.
 
-Everything else supports that grammar: [Models](models/index.md) lists every architecture you can pass to `model=` — YOLO26, YOLO11, SAM 3, RT-DETR, and more — [Datasets](datasets/index.md) supplies what each Task trains on, [Guides](guides/index.md) is a broad collection of in-depth how-tos spanning hardware deployment, hyperparameter tuning, dataset conversion, and full project walkthroughs, [Integrations](integrations/index.md) connects the pipeline to the training and deployment tools you already use, and the [Reference](reference/index.md) section documents every class and function in the Python API.
+Everything else supports that grammar: [Models](models/index.md) lists every architecture you can pass to `model=` — YOLO26, YOLO11, SAM 3, RT-DETR, and more — [Datasets](datasets/index.md) supplies what each Task trains on, [Guides](guides/index.md) is a broad collection of in-depth how-tos spanning deployment, hyperparameter tuning, dataset conversion, and full project walkthroughs, [Integrations](integrations/index.md) connects the pipeline to the hardware, training, and deployment tools you already use, and the [Reference](reference/index.md) section documents every class and function in the Python API.
 
 Beyond the Python package, two more surfaces run on the same models: the [Ultralytics Platform](platform/index.md) for cloud annotation, training, and deployment, and [Ultralytics Inference](inference/index.md), a standalone Rust library and CLI for running exported models without a Python runtime.
 

@@ -29,10 +29,11 @@ from ultralytics.utils import (
     emojis,
     is_dir_writeable,
 )
-from ultralytics.utils.checks import check_file, check_font, is_ascii, normalize_platform_uri
+from ultralytics.utils.checks import FONT, FONT_UNICODE, check_file, check_font, is_ascii, normalize_platform_uri
 from ultralytics.utils.downloads import download, safe_download
 from ultralytics.utils.ops import segments2boxes
 from ultralytics.utils.patches import imread
+from ultralytics.utils.plotting import Colors
 
 HELP_URL = "See https://docs.ultralytics.com/datasets for dataset formatting guidance."
 IMG_FORMATS = {
@@ -63,6 +64,17 @@ DATASET_KEY_TYPES = {  # dataset YAML keys and their permitted types
 }
 
 DEPTH_PNG_SCALE = 1000  # uint16 millimeters by default; zero is invalid
+
+
+def tile_windows(
+    shape: tuple[int, int], size: int | tuple[int, int], overlap: float = 0.2
+) -> list[tuple[int, int, int, int]]:
+    """Return native-pixel windows covering an image, overlapping by a fraction and edges aligned to its boundary."""
+    h, w = shape
+    th, tw = (size, size) if isinstance(size, int) else size
+    ys = range(0, max(h - th, 0), max(1, round(th * (1 - overlap))))
+    xs = range(0, max(w - tw, 0), max(1, round(tw * (1 - overlap))))
+    return [(x, y, min(x + tw, w), min(y + th, h)) for y in (*ys, max(h - th, 0)) for x in (*xs, max(w - tw, 0))]
 
 
 def save_depth_png(path: str | Path, depth: np.ndarray, scale: float = DEPTH_PNG_SCALE) -> None:
@@ -382,9 +394,9 @@ def read_mask(mask_file: str, mode: str) -> np.ndarray:
         FileNotFoundError: If the mask file is missing or unreadable.
     """
     if mode == "P":  # colored (VOC-style) palettes hold class ids as indices, gray palettes as gray levels
-        with Image.open(mask_file) as im:
-            p = np.array(im.getpalette()).reshape(-1, 3)
-            return np.array(im.convert("L") if (p == p[:, :1]).all() else im)
+        with Image.open(mask_file) as im:  # unless a short gray palette, e.g. Image.fromarray(m, "P"), merges ids
+            p, gray = np.array(im.getpalette()).reshape(-1, 3), im.convert("L")
+            return np.array(gray if (p == p[:, :1]).all() and len(gray.getcolors()) == len(im.getcolors()) else im)
     mask = cv2.imread(mask_file, cv2.IMREAD_ANYDEPTH)  # keeps 16-bit ids
     if mask is None:
         raise FileNotFoundError(f"Semantic mask not found or unreadable: {mask_file}")
@@ -669,8 +681,11 @@ def get_split_fraction(fraction: float | list[float | int], split: str) -> float
         (float | int): Fraction of the split to use as a ratio (float) or image count (int).
 
     Raises:
+        TypeError: If the fraction or a per-split value is a boolean.
         ValueError: If the resolved fraction is 0 for the 'train' or 'val' split.
     """
+    if isinstance(fraction, bool) or (isinstance(fraction, list) and any(isinstance(x, bool) for x in fraction)):
+        raise TypeError(f"'fraction' must not contain boolean values: {fraction!r}")
     if isinstance(fraction, list) and split in (splits := ("train", "val", "test")):
         index = splits.index(split)
         fraction = fraction[index] if index < len(fraction) else 1.0
@@ -776,6 +791,8 @@ def check_det_dataset(dataset: str | Path, autodownload: bool = True, split: str
         data["nc"] = len(data["names"])
 
     data["names"] = check_class_names(data["names"])
+    if not Colors.parse(data.get("colors")):  # a malformed list warns once here and never reaches model or plots
+        data.pop("colors", None)
     data["channels"] = data.get("channels", 3)  # get image channels, default to 3
 
     # Resolve paths
@@ -814,9 +831,6 @@ def check_det_dataset(dataset: str | Path, autodownload: bool = True, split: str
                 (".zip", ".tar", ".gz", ".tgz", ".xz", ".bz2", ".txz", ".tbz2")
             ):  # URL
                 safe_download(url=s, dir=DATASETS_DIR, delete=True)
-            elif s.startswith("bash "):  # bash script
-                LOGGER.info(f"Running {s} ...")
-                subprocess.run(s.split(), check=True)
             else:  # python script
                 exec(s, {"yaml": data})  # noqa: S102
             dt = f"({round(time.time() - t, 1)}s)"
@@ -824,7 +838,7 @@ def check_det_dataset(dataset: str | Path, autodownload: bool = True, split: str
             LOGGER.info(f"Dataset download {s}\n")
     if data.get("masks_dir") is None and (path / "masks").is_dir():  # after download so scripts can create it
         data["masks_dir"] = "masks"  # PNG semantic masks in the default folder select SemanticDataset
-    check_font("Arial.ttf" if is_ascii(data["names"]) else "Arial.Unicode.ttf")  # download fonts
+    check_font(FONT if is_ascii(data["names"]) else FONT_UNICODE)  # download fonts
 
     return data  # dictionary
 
@@ -965,7 +979,7 @@ def compress_one_image(f: str | Path, f_new: str | Path | None = None, max_dim: 
             im = im.convert("RGB")
         r = max_dim / max(im.height, im.width)  # ratio
         if r < 1.0:  # image too large
-            im = im.resize((int(im.width * r), int(im.height * r)))
+            im = im.resize((max(1, int(im.width * r)), max(1, int(im.height * r))))
         _replace_image(f_new or f, lambda tmp: im.save(tmp, "JPEG", quality=quality, optimize=True))
     except Exception as e:  # use OpenCV
         LOGGER.warning(f"Image compression PIL failure {f}: {e}")
@@ -973,7 +987,7 @@ def compress_one_image(f: str | Path, f_new: str | Path | None = None, max_dim: 
         im_height, im_width = im.shape[:2]
         r = max_dim / max(im_height, im_width)  # ratio
         if r < 1.0:  # image too large
-            im = cv2.resize(im, (int(im_width * r), int(im_height * r)), interpolation=cv2.INTER_AREA)
+            im = cv2.resize(im, (max(1, int(im_width * r)), max(1, int(im_height * r))), interpolation=cv2.INTER_AREA)
         _replace_image(f_new or f, lambda tmp: cv2.imwrite(tmp, im))
 
 
@@ -987,10 +1001,24 @@ def load_dataset_cache_file(path: Path) -> dict:
         (dict): The loaded cache dictionary.
     """
     import gc
+    import pickle
+
+    safe = {("numpy", "ndarray"), ("numpy", "dtype")}
+    safe |= {(f"numpy.{m}.multiarray", "_reconstruct") for m in ("core", "_core")}  # numpy<2, numpy>=2
+    safe |= {(m, c) for m in ("pathlib", "pathlib._local") for c in ("PosixPath", "WindowsPath")}  # _local: Python 3.13
+
+    class Unpickler(pickle.Unpickler):
+        def find_class(self, module, name):  # rebuild only the numpy arrays and paths that real caches contain
+            if (module, name) in safe:
+                return super().find_class(module, name)
+            raise pickle.UnpicklingError(f"'{module}.{name}' is not allowed in a dataset cache file")
 
     gc.disable()  # reduce pickle load time https://github.com/ultralytics/ultralytics/pull/1585
     try:
-        return np.load(str(path), allow_pickle=True).item()  # load dict
+        with open(path, "rb") as f:
+            fmt = np.lib.format
+            (fmt.read_array_header_1_0 if fmt.read_magic(f) == (1, 0) else fmt.read_array_header_2_0)(f)
+            return Unpickler(f).load().item()  # np.save stores the dict as a pickled 0-d object array
     finally:
         gc.enable()  # also when loading raises, e.g. no cache file yet
 

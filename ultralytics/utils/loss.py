@@ -21,7 +21,7 @@ from ultralytics.utils.tal import (
     dist2rbox,
     make_anchors,
 )
-from ultralytics.utils.torch_utils import autocast
+from ultralytics.utils.torch_utils import autocast, interpolate_bilinear
 
 from .metrics import bbox_iou, probiou
 from .tal import bbox2dist, rbox2dist
@@ -544,7 +544,7 @@ class v8SegmentationLoss(v8DetectionLoss):
             masks = batch["masks"].to(self.device).float()
             if tuple(masks.shape[-2:]) != (mask_h, mask_w):  # downsample
                 # masks = F.interpolate(masks[None], (mask_h, mask_w), mode="nearest")[0]
-                proto = F.interpolate(proto, masks.shape[-2:], mode="bilinear", align_corners=False)
+                proto = interpolate_bilinear(proto, masks.shape[-2:])
 
             imgsz = (
                 torch.tensor(preds["feats"][0].shape[2:], device=self.device, dtype=pred_masks.dtype) * self.stride[0]
@@ -1021,10 +1021,15 @@ class PoseLoss26(v8PoseLoss):
 class v8ClassificationLoss:
     """Criterion class for computing training losses for classification."""
 
+    def __init__(self, model: torch.nn.Module | None = None):
+        """Initialize the loss with the model's cls_pw class weights, if set."""
+        w = getattr(model, "class_weights", None)
+        self.class_weights = None if w is None else w.to(next(model.parameters()))  # match model device and dtype
+
     def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Compute the classification loss between predictions and true labels."""
         preds = preds[1] if isinstance(preds, (list, tuple)) else preds
-        loss = F.cross_entropy(preds, batch["cls"], reduction="mean")
+        loss = F.cross_entropy(preds, batch["cls"], weight=self.class_weights, reduction="mean")
         return loss, {"loss": loss.detach()}
 
 
@@ -1254,7 +1259,7 @@ class DepthLoss26:
             gt_depth = gt_depth.unsqueeze(1)
 
         if gt_depth.shape[-2:] != pred_depth.shape[-2:]:
-            pred_depth = F.interpolate(pred_depth, size=gt_depth.shape[-2:], mode="bilinear", align_corners=True)
+            pred_depth = interpolate_bilinear(pred_depth, gt_depth.shape[-2:], align_corners=True)
 
         valid = gt_depth > 0.001
         if valid.sum() < 10:
@@ -1358,11 +1363,7 @@ class TVPDetectLoss:
         """Initialize TVPDetectLoss with task-prompt and visual-prompt criteria using the provided model."""
         self.vp_criterion = v8DetectionLoss(model, tal_topk, tal_topk2)
         self.loss_names = tuple(k[:-5] for k in self.vp_criterion.loss_names)  # strip "_loss" suffix
-        # NOTE: store following info as it's changeable in __call__
         self.hyp = self.vp_criterion.hyp
-        self.ori_nc = self.vp_criterion.nc
-        self.ori_no = self.vp_criterion.no
-        self.ori_reg_max = self.vp_criterion.reg_max
 
     def parse_output(self, preds) -> dict[str, torch.Tensor]:
         """Return the training outputs dict from model predictions."""
@@ -1375,24 +1376,9 @@ class TVPDetectLoss:
     def loss(
         self, preds: dict[str, torch.Tensor], batch: dict[str, torch.Tensor]
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calculate the visual-prompt classification loss, or zeros when predictions use the original classes."""
-        if self.ori_nc == preds["scores"].shape[1]:
-            loss = torch.zeros(3, device=self.vp_criterion.device, requires_grad=True)
-            return loss, dict(zip(self.loss_names, loss.detach()))
-
-        preds["scores"] = self._get_vp_features(preds)
+        """Calculate the visual-prompt classification loss."""
         vp_loss = self.vp_criterion(preds, batch)
         return vp_loss[0][1], dict(zip(self.loss_names, vp_loss[1].values()))
-
-    def _get_vp_features(self, preds: dict[str, torch.Tensor]) -> torch.Tensor:
-        """Update the criterion to the visual-prompt class count and return the visual-prompt scores."""
-        scores = preds["scores"]
-        vnc = scores.shape[1]
-
-        self.vp_criterion.nc = vnc
-        self.vp_criterion.no = vnc + self.vp_criterion.reg_max * 4
-        self.vp_criterion.assigner.num_classes = vnc
-        return scores
 
 
 class TVPSegmentLoss(TVPDetectLoss):
@@ -1400,22 +1386,12 @@ class TVPSegmentLoss(TVPDetectLoss):
 
     def __init__(self, model: torch.nn.Module, tal_topk: int = 10, tal_topk2: int | None = None):
         """Initialize TVPSegmentLoss with task-prompt and visual-prompt criteria using the provided model."""
-        super().__init__(model)
         self.vp_criterion = v8SegmentationLoss(model, tal_topk, tal_topk2)
         self.loss_names = tuple(k[:-5] for k in self.vp_criterion.loss_names if k != "sem_loss")  # strip "_loss"
         self.hyp = self.vp_criterion.hyp
 
-    def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calculate the loss for text-visual prompt segmentation."""
-        return self.loss(self.parse_output(preds), batch)
-
     def loss(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calculate the visual-prompt classification loss, or zeros when predictions use the original classes."""
-        if self.ori_nc == preds["scores"].shape[1]:
-            loss = torch.zeros(4, device=self.vp_criterion.device, requires_grad=True)
-            return loss, dict(zip(self.loss_names, loss.detach()))
-
-        preds["scores"] = self._get_vp_features(preds)
+        """Calculate the visual-prompt classification loss."""
         vp_loss = self.vp_criterion(preds, batch)
         cls_loss = vp_loss[0][2]
         # zip drops the trailing "sem_loss" item to match the logged columns
@@ -1449,9 +1425,9 @@ class SemanticSegmentationLoss(nn.Module):
             weight = torch.from_numpy(CITYSCAPES_WEIGHT)
         weight = None if weight is None else weight.to(device=self.device, dtype=self.dtype)
         if self.nc == 1:
-            self.ce = nn.BCEWithLogitsLoss(reduction="sum")  # binary: class weighting intentionally unsupported
+            self.ce = nn.BCEWithLogitsLoss(reduction="none")  # binary: class weighting intentionally unsupported
         else:
-            self.ce = nn.CrossEntropyLoss(ignore_index=255, reduction="sum").to(device=self.device, dtype=self.dtype)
+            self.ce = nn.CrossEntropyLoss(ignore_index=255, reduction="none").to(device=self.device, dtype=self.dtype)
             if weight is not None:
                 # Non-persistent: weight is a deterministic constant, no need to serialize into ckpt state_dict.
                 self.ce.register_buffer("weight", weight, persistent=False)
@@ -1465,33 +1441,26 @@ class SemanticSegmentationLoss(nn.Module):
         return masks
 
     def _ce_loss(self, preds, masks, valid):
-        """Compute cross-entropy (BCE when nc == 1) on flattened pixels to avoid the CUDA nll_loss2d path."""
+        """Sum per-pixel cross-entropy (BCE when nc == 1), as CUDA nll_loss2d sums nondeterministically."""
         flat = masks.reshape(-1)
         if self.nc == 1:
-            logits = preds.reshape(-1)[valid]
+            preds = preds.reshape(-1)[valid]
             target = flat[valid].float()
             denominator = valid.sum()
         else:
-            logits = preds.permute(0, 2, 3, 1).reshape(-1, self.nc)
-            target = flat.long()
-            denominator = valid.sum() if self.ce.weight is None else self.ce.weight[target[valid]].sum()
-        return self.ce(logits, target) / (denominator + (denominator == 0))  # weight sums may be <1, guard only 0
+            target = masks.long()
+            denominator = valid.sum() if self.ce.weight is None else self.ce.weight[flat[valid].long()].sum()
+        return self.ce(preds, target).sum() / (denominator + (denominator == 0))  # weight sums may be <1, guard only 0
 
     def _dice_loss(self, preds, masks, valid):
         """Compute Dice loss excluding ignore pixels."""
         if self.nc == 1:
             return self._binary_dice_loss(preds, masks, valid)
-        flat_target = masks.reshape(-1)
-        pred_soft = F.softmax(preds, dim=1)
-        target = flat_target[valid].long()
-        flat_pred = pred_soft.float().permute(0, 2, 3, 1).reshape(-1, self.nc)[valid]
-        intersection = torch.zeros(self.nc, device=preds.device, dtype=torch.float32)
-        intersection.scatter_add_(0, target, flat_pred.gather(1, target[:, None]).squeeze(1))
-        pred_sum = flat_pred.sum(dim=0)
-        target_sum = torch.zeros_like(intersection).scatter_add_(
-            0, target, torch.ones_like(target, dtype=torch.float32)
-        )
-        cardinality = pred_sum + target_sum
+        valid = valid.reshape_as(masks)[:, None]
+        pred_soft = F.softmax(preds, dim=1).float() * valid
+        target = (masks[:, None] == torch.arange(self.nc, device=masks.device)[:, None, None]) & valid
+        intersection = (pred_soft * target).sum((0, 2, 3))
+        cardinality = pred_soft.sum((0, 2, 3)) + target.sum((0, 2, 3))
         return (1.0 - (2.0 * intersection + 1.0) / (cardinality + 1.0)).mean()
 
     def _binary_dice_loss(self, preds, masks, valid):
@@ -1525,7 +1494,7 @@ class SemanticSegmentationLoss(nn.Module):
         masks = batch["semantic_mask"].to(preds.device)
         valid = masks.reshape(-1) != 255
         if preds.shape[2:] != masks.shape[1:]:
-            preds = F.interpolate(preds, size=masks.shape[1:], mode="bilinear", align_corners=False)
+            preds = interpolate_bilinear(preds, masks.shape[1:])
 
         # Main cross-entropy and Dice loss.
         ce_loss = self._ce_loss(preds, masks, valid)
@@ -1536,7 +1505,7 @@ class SemanticSegmentationLoss(nn.Module):
         aux_loss = torch.tensor(0.0, device=preds.device, dtype=ce_loss.dtype)
         if aux_logits is not None:
             if aux_logits.shape[2:] != masks.shape[1:]:
-                aux_logits = F.interpolate(aux_logits, size=masks.shape[1:], mode="bilinear", align_corners=False)
+                aux_logits = interpolate_bilinear(aux_logits, masks.shape[1:])
             aux_loss = self._ce_loss(aux_logits, masks, valid) * 0.4
             total += aux_loss
 

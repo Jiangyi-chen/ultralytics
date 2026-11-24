@@ -470,7 +470,7 @@ Check the section on [Resuming Interrupted Trainings](#resuming-interrupted-trai
 
 ### How do I train a model on an imbalanced dataset?
 
-Class imbalance occurs when some classes have significantly fewer examples than others in your training data. This can cause the model to perform poorly on rare classes. Ultralytics YOLO supports class weighting through the `cls_pw` argument to address this issue.
+Class imbalance occurs when some classes have significantly fewer examples than others in your training data. This can cause the model to perform poorly on rare classes. Ultralytics YOLO supports class weighting through the `cls_pw` argument to address this issue. Loss weighting works best as the last step, after collecting and oversampling the rare classes, as described in [Handling Class Imbalance](../guides/preprocessing-annotated-data.md#handling-class-imbalance).
 
 The `cls_pw` argument controls class weighting power based on inverse class frequency:
 
@@ -478,7 +478,7 @@ The `cls_pw` argument controls class weighting power based on inverse class freq
 - `cls_pw=1.0`: Applies full inverse frequency weighting
 - Values between `0.0` and `1.0`: Provide partial weighting for moderate imbalance
 
-The class weights are computed as `(1.0 / class_counts) ^ cls_pw` and normalized so their mean equals 1.0. Classes without training labels, such as those excluded by `classes=`, get a weight of 1.0.
+The class weights are computed as `(1.0 / class_counts) ^ cls_pw` and normalized so their mean equals 1.0. `class_counts` is the number of labeled objects per class, or the number of training images per class for classification, and classes without training labels, such as those excluded by `classes=`, get a weight of 1.0. Semantic segmentation computes its weights from pixel frequency instead, as `(1.0 / ln(1.02 + p)) ^ cls_pw`, where `p` is the share of labeled training pixels in each class, so a class without labeled pixels gets the largest weight.
 
 !!! example "Training on Imbalanced Dataset"
 
